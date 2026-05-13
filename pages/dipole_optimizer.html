@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dipole Length Optimizer</title>
+  <link rel="stylesheet" href="../res/dipole_optimizer.css">
+</head>
+<body>
+  <main class="card">
+    <section class="header">
+      <h1>Dipole Length Optimizer</h1>
+      <p class="subtitle">Replicates the original SWR-trim math: wavelength = 300/f, quarter-wave, then x0.93.</p>
+      <nav class="top-links" aria-label="Navigation">
+        <a class="tool-link" href="../index.html">Back to index</a>
+      </nav>
+    </section>
+
+    <form id="optimizer-form" novalidate>
+      <div class="grid">
+        <div>
+          <label for="resonant">Current resonance frequency (MHz)</label>
+          <input id="resonant" name="resonant" type="text" inputmode="decimal" maxlength="12" placeholder="3.600" required pattern="\d{1,5}(\.\d{1,6})?" value="3.600">
+          <div class="hint">Accepted range: 0.001 to 10000.000</div>
+        </div>
+
+        <div>
+          <label for="target">Desired resonance frequency (MHz)</label>
+          <input id="target" name="target" type="text" inputmode="decimal" maxlength="12" placeholder="3.700" required pattern="\d{1,5}(\.\d{1,6})?" value="3.700">
+          <div class="hint">Decimal values only. Example: 14.200</div>
+        </div>
+      </div>
+
+      <button type="submit">Calculate</button>
+    </form>
+
+    <div id="errors" class="errors" aria-live="polite"></div>
+
+    <section id="result" class="result" aria-live="polite">
+      <div id="badge"></div>
+      <div id="main-line" class="main-line"></div>
+      <div id="detail-results" class="detail-results"></div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th>Current resonance</th>
+            <th>Target resonance</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Wavelength</td>
+            <td id="resonant-wavelength"></td>
+            <td id="target-wavelength"></td>
+          </tr>
+          <tr>
+            <td>Quarter-wave</td>
+            <td id="resonant-quarter"></td>
+            <td id="target-quarter"></td>
+          </tr>
+          <tr>
+            <td>Adjusted element length</td>
+            <td id="resonant-length"></td>
+            <td id="target-length"></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p class="foot">For dipoles: apply trim value per leg. For verticals: apply to the radiator. Always trim incrementally and re-check SWR.</p>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      "use strict";
+
+      var MIN_FREQ = 0.001;
+      var MAX_FREQ = 10000.0;
+      var DECIMAL_RE = /^\d{1,5}(?:\.\d{1,6})?$/;
+      var M_TO_FT = 3.28084;
+      var CM_TO_FT = 0.0328084;
+
+      var form = document.getElementById("optimizer-form");
+      var resonantInput = document.getElementById("resonant");
+      var targetInput = document.getElementById("target");
+      var errorsBox = document.getElementById("errors");
+      var resultBox = document.getElementById("result");
+
+      function formatMetersAndFeet(valueM) {
+        return valueM.toFixed(3) + " m (" + (valueM * M_TO_FT).toFixed(3) + " ft)";
+      }
+
+      function formatCmAndFeet(valueCm) {
+        return valueCm.toFixed(2) + " cm (" + (valueCm * CM_TO_FT).toFixed(3) + " ft)";
+      }
+
+      function elementLengthCm(freqMhz) {
+        return ((300 / freqMhz) / 4) * 0.93 * 100;
+      }
+
+      function parseFrequency(rawValue, fieldName, errors) {
+        var value = rawValue.trim();
+
+        if (value === "") {
+          errors.push(fieldName + " is required.");
+          return null;
+        }
+
+        // Strict format: plain decimal only.
+        if (!DECIMAL_RE.test(value)) {
+          errors.push(fieldName + " must be a decimal number like 3.700 (no signs or scientific notation).");
+          return null;
+        }
+
+        var num = Number(value);
+
+        if (!Number.isFinite(num)) {
+          errors.push(fieldName + " must be a finite number.");
+          return null;
+        }
+
+        if (num < MIN_FREQ || num > MAX_FREQ) {
+          errors.push(fieldName + " must be between " + MIN_FREQ.toFixed(3) + " and " + MAX_FREQ.toFixed(0) + " MHz.");
+          return null;
+        }
+
+        return num;
+      }
+
+      function showErrors(errors) {
+        if (!errors.length) {
+          errorsBox.style.display = "none";
+          errorsBox.innerHTML = "";
+          return;
+        }
+
+        var html = "<strong>Validation error</strong><ul>";
+        for (var i = 0; i < errors.length; i += 1) {
+          html += "<li>" + errors[i].replace(/[<>&]/g, "") + "</li>";
+        }
+        html += "</ul>";
+
+        errorsBox.innerHTML = html;
+        errorsBox.style.display = "block";
+      }
+
+      function setText(id, text) {
+        document.getElementById(id).textContent = text;
+      }
+
+      function buildDetailCard(title, actionWord, amountCm, isFoldback) {
+        return (
+          '<div class="detail-card">' +
+            '<div class="detail-title">' + title + '</div>' +
+            '<div class="detail-value">' + actionWord + ' ' + formatCmAndFeet(amountCm) + '</div>' +
+            (isFoldback
+              ? '<div class="detail-note">(reminder: only if tuning the foldback, not the element)</div>'
+              : '') +
+          '</div>'
+        );
+      }
+
+      function buildMatchCard(title, isFoldback) {
+        return (
+          '<div class="detail-card">' +
+            '<div class="detail-title">' + title + '</div>' +
+            '<div class="detail-value">No change</div>' +
+            (isFoldback
+              ? '<div class="detail-note">(reminder: only if tuning the foldback, not the element)</div>'
+              : '') +
+          '</div>'
+        );
+      }
+
+      function showResult(data) {
+        var badgeHost = document.getElementById("badge");
+        var mainLine = document.getElementById("main-line");
+        var detailHost = document.getElementById("detail-results");
+
+        badgeHost.className = "";
+
+        if (data.direction === "ADD") {
+          badgeHost.innerHTML = '<span class="badge add">ADD</span>';
+          mainLine.textContent = "Add " + formatCmAndFeet(data.deltaAbsCm);
+          detailHost.innerHTML =
+            buildDetailCard("Standard Quarter-Wave element", "ADD", data.deltaAbsCm, false) +
+            buildDetailCard("If tuning just the Quarter-Wave foldback", "ADD", data.deltaAbsCm * 2, true) +
+            buildDetailCard("Standard Three-Quarter-Wave element", "ADD", data.deltaAbsCm * 3, false) +
+            buildDetailCard("If tuning just the Three-Quarter-Wave foldback", "ADD", data.deltaAbsCm * 6, true);
+        } else if (data.direction === "CUT") {
+          badgeHost.innerHTML = '<span class="badge cut">CUT</span>';
+          mainLine.textContent = "Cut " + formatCmAndFeet(data.deltaAbsCm);
+          detailHost.innerHTML =
+            buildDetailCard("Standard Quarter-Wave element", "CUT", data.deltaAbsCm, false) +
+            buildDetailCard("If tuning just the Quarter-Wave foldback", "CUT", data.deltaAbsCm * 2, true) +
+            buildDetailCard("Standard Three-Quarter-Wave element", "CUT", data.deltaAbsCm * 3, false) +
+            buildDetailCard("If tuning just the Three-Quarter-Wave foldback", "CUT", data.deltaAbsCm * 6, true);
+        } else {
+          badgeHost.innerHTML = '<span class="badge match">MATCH</span>';
+          mainLine.textContent = "No trim needed. Frequencies already match this model.";
+          detailHost.innerHTML =
+            buildMatchCard("Standard Quarter-Wave element", false) +
+            buildMatchCard("Quarter-Wave foldback", true) +
+            buildMatchCard("Standard Three-Quarter-Wave element", false) +
+            buildMatchCard("Three-Quarter-Wave foldback", true);
+        }
+
+        setText("resonant-wavelength", formatMetersAndFeet(data.resonantWavelength));
+        setText("target-wavelength", formatMetersAndFeet(data.targetWavelength));
+        setText("resonant-quarter", formatMetersAndFeet(data.resonantQuarter));
+        setText("target-quarter", formatMetersAndFeet(data.targetQuarter));
+        setText("resonant-length", formatCmAndFeet(data.resonantLengthCm));
+        setText("target-length", formatCmAndFeet(data.targetLengthCm));
+
+        resultBox.style.display = "block";
+      }
+
+      form.addEventListener("submit", function (event) {
+        event.preventDefault();
+
+        var errors = [];
+        var resonant = parseFrequency(resonantInput.value, "Current resonance frequency", errors);
+        var target = parseFrequency(targetInput.value, "Desired resonance frequency", errors);
+
+        showErrors(errors);
+
+        if (errors.length > 0 || resonant === null || target === null) {
+          resultBox.style.display = "none";
+          return;
+        }
+
+        var resonantWavelength = 300 / resonant;
+        var targetWavelength = 300 / target;
+        var resonantQuarter = resonantWavelength / 4;
+        var targetQuarter = targetWavelength / 4;
+        var resonantLengthCm = elementLengthCm(resonant);
+        var targetLengthCm = elementLengthCm(target);
+
+        var deltaCm = Number((targetLengthCm - resonantLengthCm).toFixed(2));
+        var direction = deltaCm > 0 ? "ADD" : (deltaCm < 0 ? "CUT" : "MATCH");
+
+        showResult({
+          resonantWavelength: resonantWavelength,
+          targetWavelength: targetWavelength,
+          resonantQuarter: resonantQuarter,
+          targetQuarter: targetQuarter,
+          resonantLengthCm: resonantLengthCm,
+          targetLengthCm: targetLengthCm,
+          deltaAbsCm: Math.abs(deltaCm),
+          direction: direction
+        });
+      });
+    }());
+  </script>
+</body>
+</html>

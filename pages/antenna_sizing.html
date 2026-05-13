@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Antenna Sizing Tool</title>
+  <link rel="stylesheet" href="../res/dipole_optimizer.css">
+</head>
+<body>
+  <main class="card">
+    <section class="header">
+      <h1>Antenna Sizing Tool</h1>
+      <p class="subtitle">Given a target frequency, calculate recommended element lengths.</p>
+      <nav class="top-links" aria-label="Navigation">
+        <a class="tool-link" href="../index.html">Back to index</a>
+      </nav>
+    </section>
+
+    <form id="sizing-form" novalidate>
+      <div class="grid">
+        <div>
+          <label for="frequency">Target frequency (MHz)</label>
+          <input id="frequency" name="frequency" type="text" inputmode="decimal" maxlength="12" placeholder="14.200" required pattern="\d{1,5}(\.\d{1,6})?" value="14.200">
+          <div class="hint">Accepted range: 0.001 to 10000.000</div>
+        </div>
+      </div>
+
+      <button type="submit">Calculate Size</button>
+    </form>
+
+    <div id="errors" class="errors" aria-live="polite"></div>
+
+    <section id="result" class="result" aria-live="polite">
+      <div class="main-line" id="summary-line"></div>
+
+      <div class="sizing-results" id="sizing-results"></div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th>Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Wavelength</td>
+            <td id="wavelength"></td>
+          </tr>
+          <tr>
+            <td>Quarter-wave (electrical)</td>
+            <td id="quarter-wave"></td>
+          </tr>
+          <tr>
+            <td>Adjusted quarter-wave element</td>
+            <td id="quarter-adjusted"></td>
+          </tr>
+          <tr>
+            <td>Adjusted three-quarter-wave element</td>
+            <td id="three-quarter-adjusted"></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p class="foot">Adjusted element sizes use the same correction factor as the optimizer: quarter-wave x 0.93.</p>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      "use strict";
+
+      var MIN_FREQ = 0.001;
+      var MAX_FREQ = 10000.0;
+      var DECIMAL_RE = /^\d{1,5}(?:\.\d{1,6})?$/;
+      var M_TO_FT = 3.28084;
+      var CM_TO_FT = 0.0328084;
+
+      var form = document.getElementById("sizing-form");
+      var frequencyInput = document.getElementById("frequency");
+      var errorsBox = document.getElementById("errors");
+      var resultBox = document.getElementById("result");
+
+      function formatMetersAndFeet(valueM) {
+        return valueM.toFixed(3) + " m (" + (valueM * M_TO_FT).toFixed(3) + " ft)";
+      }
+
+      function formatCmAndFeet(valueCm) {
+        return valueCm.toFixed(2) + " cm (" + (valueCm * CM_TO_FT).toFixed(3) + " ft)";
+      }
+
+      function parseFrequency(rawValue, fieldName, errors) {
+        var value = rawValue.trim();
+
+        if (value === "") {
+          errors.push(fieldName + " is required.");
+          return null;
+        }
+
+        if (!DECIMAL_RE.test(value)) {
+          errors.push(fieldName + " must be a decimal number like 14.200 (no signs or scientific notation).");
+          return null;
+        }
+
+        var num = Number(value);
+
+        if (!Number.isFinite(num)) {
+          errors.push(fieldName + " must be a finite number.");
+          return null;
+        }
+
+        if (num < MIN_FREQ || num > MAX_FREQ) {
+          errors.push(fieldName + " must be between " + MIN_FREQ.toFixed(3) + " and " + MAX_FREQ.toFixed(0) + " MHz.");
+          return null;
+        }
+
+        return num;
+      }
+
+      function showErrors(errors) {
+        if (!errors.length) {
+          errorsBox.style.display = "none";
+          errorsBox.innerHTML = "";
+          return;
+        }
+
+        var html = "<strong>Validation error</strong><ul>";
+        for (var i = 0; i < errors.length; i += 1) {
+          html += "<li>" + errors[i].replace(/[<>&]/g, "") + "</li>";
+        }
+        html += "</ul>";
+
+        errorsBox.innerHTML = html;
+        errorsBox.style.display = "block";
+      }
+
+      function setText(id, text) {
+        document.getElementById(id).textContent = text;
+      }
+
+      function buildSizingCard(title, value) {
+        return (
+          '<div class="sizing-card">' +
+            '<div class="sizing-label">' + title + '</div>' +
+            '<div class="sizing-value">' + value + '</div>' +
+          '</div>'
+        );
+      }
+
+      function showResult(data) {
+        var summary = document.getElementById("summary-line");
+        var cardsHost = document.getElementById("sizing-results");
+
+        summary.textContent = "Recommended lengths for " + data.frequencyMhz.toFixed(3) + " MHz";
+
+        cardsHost.innerHTML =
+          buildSizingCard("Quarter-wave element (adjusted)", formatCmAndFeet(data.quarterAdjustedCm)) +
+          buildSizingCard("Dipole leg length (per side)", formatCmAndFeet(data.dipoleLegCm)) +
+          buildSizingCard("Three-quarter-wave element (adjusted)", formatCmAndFeet(data.threeQuarterAdjustedCm)) +
+          buildSizingCard("Foldback-only guide lengths", "Quarter: " + formatCmAndFeet(data.quarterAdjustedCm * 2) + " | Three-quarter: " + formatCmAndFeet(data.threeQuarterAdjustedCm * 2));
+
+        setText("wavelength", formatMetersAndFeet(data.wavelengthM));
+        setText("quarter-wave", formatMetersAndFeet(data.quarterWaveM));
+        setText("quarter-adjusted", formatCmAndFeet(data.quarterAdjustedCm));
+        setText("three-quarter-adjusted", formatCmAndFeet(data.threeQuarterAdjustedCm));
+
+        resultBox.style.display = "block";
+      }
+
+      form.addEventListener("submit", function (event) {
+        event.preventDefault();
+
+        var errors = [];
+        var frequencyMhz = parseFrequency(frequencyInput.value, "Target frequency", errors);
+
+        showErrors(errors);
+
+        if (errors.length > 0 || frequencyMhz === null) {
+          resultBox.style.display = "none";
+          return;
+        }
+
+        var wavelengthM = 300 / frequencyMhz;
+        var quarterWaveM = wavelengthM / 4;
+        var quarterAdjustedCm = quarterWaveM * 0.93 * 100;
+        var dipoleLegCm = quarterAdjustedCm / 2;
+        var threeQuarterAdjustedCm = quarterAdjustedCm * 3;
+
+        showResult({
+          frequencyMhz: frequencyMhz,
+          wavelengthM: wavelengthM,
+          quarterWaveM: quarterWaveM,
+          quarterAdjustedCm: quarterAdjustedCm,
+          dipoleLegCm: dipoleLegCm,
+          threeQuarterAdjustedCm: threeQuarterAdjustedCm
+        });
+      });
+    }());
+  </script>
+</body>
+</html>
