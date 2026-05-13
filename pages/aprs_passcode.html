@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>APRS Passcode Generator</title>
+  <link rel="stylesheet" href="../res/dipole_optimizer.css">
+</head>
+<body>
+  <main class="card">
+    <section class="header">
+      <h1>APRS Passcode Generator</h1>
+      <p class="subtitle">Generate your passcode for connecting to the APRS-IS network.</p>
+      <nav class="top-links" aria-label="Navigation">
+        <a class="tool-link" href="../index.html">Back to index</a>
+      </nav>
+    </section>
+
+    <form id="aprs-form" novalidate>
+      <div class="grid">
+        <div>
+          <label for="callsign">HAM Radio Callsign</label>
+          <input id="callsign" name="callsign" type="text" placeholder="IU2FRL" value="IU2FRL" maxlength="10">
+          <div class="hint">Without SSID (e.g., IU2FRL, not IU2FRL-1)</div>
+        </div>
+      </div>
+
+      <button type="submit">Generate Passcode</button>
+    </form>
+
+    <div id="errors" class="errors" aria-live="polite"></div>
+
+    <section id="result" class="result" aria-live="polite">
+      <div class="sizing-results" id="passcode-results"></div>
+      <p class="foot">Use this passcode to authenticate with APRS-IS servers. Required for IGate operations and receive-only connections.</p>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      "use strict";
+
+      var form = document.getElementById("aprs-form");
+      var callsignInput = document.getElementById("callsign");
+      var errorsBox = document.getElementById("errors");
+      var resultBox = document.getElementById("result");
+
+      function showErrors(errors) {
+        if (!errors.length) {
+          errorsBox.style.display = "none";
+          return;
+        }
+        var html = "<strong>Validation error</strong><ul>";
+        for (var i = 0; i < errors.length; i += 1) {
+          html += "<li>" + errors[i].replace(/[<>&]/g, "") + "</li>";
+        }
+        html += "</ul>";
+        errorsBox.innerHTML = html;
+        errorsBox.style.display = "block";
+      }
+
+      function generateAPRSPasscode(callsign) {
+        var call = callsign.toUpperCase();
+        var tmpCode = 29666; // 0x73e2
+
+        for (var i = 0; i < call.length; i += 2) {
+          tmpCode = tmpCode ^ (call.charCodeAt(i) * 256);
+          if (i + 1 < call.length) {
+            tmpCode = tmpCode ^ call.charCodeAt(i + 1);
+          }
+        }
+
+        var passcode = tmpCode & 32767;
+        return passcode;
+      }
+
+      function showResult(passcode) {
+        var html =
+          '<div class="sizing-card"><div class="sizing-label">Your APRS Passcode</div><div class="sizing-value" style="font-size: 2rem; font-weight: bold;">' + passcode + '</div></div>';
+        document.getElementById("passcode-results").innerHTML = html;
+        resultBox.style.display = "block";
+      }
+
+      form.addEventListener("submit", function (event) {
+        event.preventDefault();
+
+        var errors = [];
+        var callsign = callsignInput.value.trim();
+
+        if (callsign === "") {
+          errors.push("Callsign is required.");
+        } else if (!/^[a-zA-Z0-9]{1,10}$/.test(callsign)) {
+          errors.push("Callsign must contain only letters and numbers (no SSID).");
+        } else if (!/^[a-zA-Z]/.test(callsign)) {
+          errors.push("Callsign must start with a letter.");
+        }
+
+        showErrors(errors);
+        if (errors.length > 0) {
+          resultBox.style.display = "none";
+          return;
+        }
+
+        var passcode = generateAPRSPasscode(callsign);
+        showResult(passcode);
+      });
+
+      // Auto-generate for default value on load
+      callsignInput.dispatchEvent(new Event("change"));
+    }());
+  </script>
+</body>
+</html>
