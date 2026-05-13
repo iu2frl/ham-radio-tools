@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Coax Filter Designer</title>
+  <link rel="stylesheet" href="../res/dipole_optimizer.css">
+  <script src="../res/cables.js"></script>
+</head>
+<body>
+  <main class="card">
+    <section class="header">
+      <h1>Coax Filter Designer</h1>
+      <p class="subtitle">Design notch and bandpass filters using coaxial transmission lines.</p>
+      <nav class="top-links" aria-label="Navigation">
+        <a class="tool-link" href="../index.html">Back to index</a>
+      </nav>
+    </section>
+
+    <form id="filter-form" novalidate>
+      <div class="grid">
+        <div>
+          <label for="filter-type">Filter type</label>
+          <select id="filter-type" name="filter-type">
+            <option value="notch">Notch (Reject)</option>
+            <option value="bandpass">Bandpass</option>
+          </select>
+        </div>
+        <div>
+          <label for="cable-type">Coax cable</label>
+          <select id="cable-type" name="cable-type">
+            <option value="">Loading cables...</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div>
+          <label for="center-freq">Center frequency (MHz)</label>
+          <input id="center-freq" name="center-freq" type="text" inputmode="decimal" maxlength="12" placeholder="145.500" value="145.500">
+          <div class="hint">0.1 to 1000 MHz</div>
+        </div>
+        <div>
+          <label for="velocity-factor">Velocity factor</label>
+          <input id="velocity-factor" name="velocity-factor" type="text" inputmode="decimal" maxlength="6" placeholder="0.66" value="0.66" readonly>
+          <div class="hint" id="vf-hint">Auto from cable (modify for custom cable)</div>
+        </div>
+      </div>
+
+      <button type="submit">Calculate</button>
+    </form>
+
+    <div id="errors" class="errors" aria-live="polite"></div>
+
+    <section id="result" class="result" aria-live="polite">
+      <div class="sizing-results" id="filter-results"></div>
+      <p class="foot">Stub length is the physical coax length needed. Use quality connectors and low-loss cable. VF varies by cable type—check your datasheet.</p>
+      
+      <div style="margin-top: 32px; padding: 16px; border-left: 3px solid #22d3ee; background: #0b1220cc;">
+        <p style="margin: 0 0 12px 0; font-weight: 700; color: #22d3ee;">Stub Configuration Quick Reference</p>
+        
+        <p style="margin: 8px 0; color: #cbd5e1;"><strong>Practical Build with T Connector (SO-239):</strong></p>
+        <p style="margin: 8px 0 16px 0; color: #94a3b8; font-size: 0.9rem;">
+          • Connect Radio → T connector → Antenna (two axial ports)<br>
+          • Connect stub to the perpendicular T port (shunt configuration)<br>
+          • Use short-circuit (both ends connected) or open-ended (one end floating) as needed
+        </p>
+
+        <p style="margin: 12px 0 8px 0; color: #cbd5e1;"><strong>Notch Filter (Reject):</strong> Short-circuited stub in shunt → blocks center frequency, passes all others</p>
+        <p style="margin: 8px 0 12px 0; color: #cbd5e1;"><strong>Bandpass Filter (Pass):</strong> Short-circuited stub in shunt → passes center frequency ± BW, rejects outside</p>
+        
+        <p style="margin: 8px 0; font-size: 0.875rem; color: #94a3b8;">
+          ⚠️ <strong>Short-circuited:</strong> Both ends connected (more robust, weatherproof)<br>
+          ⚠️ <strong>Open-ended:</strong> One end floating (resonant at specific frequency, can collect moisture)
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      "use strict";
+
+      var cableSpecs = getCableSpecs();
+
+      var form = document.getElementById("filter-form");
+      var filterTypeInput = document.getElementById("filter-type");
+      var cableTypeInput = document.getElementById("cable-type");
+      var centerFreqInput = document.getElementById("center-freq");
+      var velocityFactorInput = document.getElementById("velocity-factor");
+      var vfHint = document.getElementById("vf-hint");
+      var errorsBox = document.getElementById("errors");
+      var resultBox = document.getElementById("result");
+
+      // Populate cable dropdown
+      populateCableDropdown(cableTypeInput);
+      cableTypeInput.value = Object.keys(cableSpecs)[0] || "";
+      updateVFFromCable();
+
+      function updateVFFromCable() {
+        var selectedCable = cableTypeInput.value;
+
+        if (selectedCable === "custom") {
+          velocityFactorInput.removeAttribute("readonly");
+          vfHint.textContent = "Enter custom velocity factor";
+          velocityFactorInput.value = "0.66";
+        } else {
+          var cable = getCableByKey(selectedCable);
+          if (cable) {
+            velocityFactorInput.value = cable.velocityFactor.toFixed(2);
+            velocityFactorInput.setAttribute("readonly", "readonly");
+            vfHint.textContent = "Auto from cable (read-only)";
+          }
+        }
+      }
+
+      cableTypeInput.addEventListener("change", updateVFFromCable);
+
+      function parseNumber(raw, fieldName, min, max, errors) {
+        var val = raw.trim();
+        if (val === "") {
+          errors.push(fieldName + " is required.");
+          return null;
+        }
+        if (!/^\d{1,5}(\.\d{1,6})?$/.test(val)) {
+          errors.push(fieldName + " must be a positive decimal.");
+          return null;
+        }
+        var num = Number(val);
+        if (!Number.isFinite(num) || num < min || num > max) {
+          errors.push(fieldName + " must be between " + min + " and " + max + ".");
+          return null;
+        }
+        return num;
+      }
+
+      function showErrors(errors) {
+        if (!errors.length) {
+          errorsBox.style.display = "none";
+          return;
+        }
+        var html = "<strong>Validation error</strong><ul>";
+        for (var i = 0; i < errors.length; i += 1) {
+          html += "<li>" + errors[i].replace(/[<>&]/g, "") + "</li>";
+        }
+        html += "</ul>";
+        errorsBox.innerHTML = html;
+        errorsBox.style.display = "block";
+      }
+
+      function formatMetersAndFeet(valueM) {
+        var valueFt = valueM * 3.28084;
+        return valueM.toFixed(3) + " m (" + valueFt.toFixed(2) + " ft)";
+      }
+
+      function showResult(data) {
+        var html = "";
+
+        if (data.filterType === "notch") {
+          html =
+            '<div class="sizing-card"><div class="sizing-label">Notch frequency</div><div class="sizing-value">' + data.freq.toFixed(3) + ' MHz</div></div>' +
+            '<div class="sizing-card"><div class="sizing-label">Short-circuit stub (λ/4)</div><div class="sizing-value">' + formatMetersAndFeet(data.quarterWaveLength) + '</div></div>' +
+            '<div class="sizing-card"><div class="sizing-label">Open-circuit stub (λ/2)</div><div class="sizing-value">' + formatMetersAndFeet(data.halfWaveLength) + '</div></div>' +
+            '<div class="sizing-card"><div class="sizing-label">Cable velocity factor</div><div class="sizing-value">' + data.vf.toFixed(2) + '</div></div>';
+        } else {
+          html =
+            '<div class="sizing-card"><div class="sizing-label">Center frequency</div><div class="sizing-value">' + data.freq.toFixed(3) + ' MHz</div></div>' +
+            '<div class="sizing-card"><div class="sizing-label">Open-circuit stub (λ/4)</div><div class="sizing-value">' + formatMetersAndFeet(data.quarterWaveLength) + '</div></div>' +
+            '<div class="sizing-card"><div class="sizing-label">Short-circuit stub (λ/2)</div><div class="sizing-value">' + formatMetersAndFeet(data.halfWaveLength) + '</div></div>' +
+            '<div class="sizing-card"><div class="sizing-label">Cable velocity factor</div><div class="sizing-value">' + data.vf.toFixed(2) + '</div></div>';
+        }
+
+        document.getElementById("filter-results").innerHTML = html;
+        resultBox.style.display = "block";
+      }
+
+      form.addEventListener("submit", function (event) {
+        event.preventDefault();
+
+        var errors = [];
+        var freq = parseNumber(centerFreqInput.value, "Frequency", 0.1, 1000, errors);
+        var vf = parseNumber(velocityFactorInput.value, "Velocity factor", 0.5, 1.0, errors);
+
+        var filterType = filterTypeInput.value;
+
+        showErrors(errors);
+        if (errors.length > 0) {
+          resultBox.style.display = "none";
+          return;
+        }
+
+        // Calculate wavelength in the coax (m)
+        // wavelength = c / f; coax_wavelength = wavelength * vf
+        var c = 300; // speed of light in Mm/s
+        var wavelength = c / freq; // meters
+        var coaxWavelength = wavelength * vf;
+        var quarterWaveLength = coaxWavelength / 4;
+        var halfWaveLength = coaxWavelength / 2;
+
+        showResult({
+          filterType: filterType,
+          freq: freq,
+          vf: vf,
+          quarterWaveLength: quarterWaveLength,
+          halfWaveLength: halfWaveLength
+        });
+      });
+    }());
+  </script>
+</body>
+</html>
