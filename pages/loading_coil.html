@@ -72,6 +72,12 @@
         return num;
       }
 
+      var M_TO_FT = 3.28084;
+
+      function formatMetersAndFeet(valueM) {
+        return valueM.toFixed(2) + " m (" + (valueM * M_TO_FT).toFixed(2) + " ft)";
+      }
+
       function showErrors(errors) {
         if (!errors.length) {
           errorsBox.style.display = "none";
@@ -102,8 +108,8 @@
         var turns = Math.sqrt(inductance * 100);
 
         var html =
-          '<div class="sizing-card"><div class="sizing-label">Full wavelength</div><div class="sizing-value">' + wavelength.toFixed(2) + ' m</div></div>' +
-          '<div class="sizing-card"><div class="sizing-label">Quarter-wave length (phys)</div><div class="sizing-value">' + quarterWave.toFixed(2) + ' m</div></div>' +
+          '<div class="sizing-card"><div class="sizing-label">Full wavelength</div><div class="sizing-value">' + formatMetersAndFeet(wavelength) + '</div></div>' +
+          '<div class="sizing-card"><div class="sizing-label">Quarter-wave length (phys)</div><div class="sizing-value">' + formatMetersAndFeet(quarterWave) + '</div></div>' +
           '<div class="sizing-card"><div class="sizing-label">Required inductance</div><div class="sizing-value">' + inductance.toFixed(1) + ' µH</div></div>' +
           '<div class="sizing-card"><div class="sizing-label">Estimated turns (rough)</div><div class="sizing-value">' + turns.toFixed(0) + ' turns</div></div>';
 

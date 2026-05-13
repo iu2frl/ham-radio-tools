@@ -63,12 +63,19 @@
       var bandInput = document.getElementById("band");
       var resultBox = document.getElementById("result");
 
+      var FT_TO_M = 0.3048;
+
+      function formatMetersAndFeet(valueFt) {
+        var valueM = valueFt * FT_TO_M;
+        return valueM.toFixed(2) + " m (" + valueFt.toFixed(2) + " ft)";
+      }
+
       function showResult(band) {
         var data = bandData[band];
         var html =
-          '<div class="sizing-card"><div class="sizing-label">Recommended end-fed length</div><div class="sizing-value">' + data.halfWave.toFixed(1) + ' ft</div></div>' +
-          '<div class="sizing-card"><div class="sizing-label">Quarter-wave option</div><div class="sizing-value">' + data.qtrWave.toFixed(1) + ' ft</div></div>' +
-          '<div class="sizing-card"><div class="sizing-label">Minimum counterpoise</div><div class="sizing-value">' + data.counterpoise.toFixed(1) + ' ft</div></div>' +
+          '<div class="sizing-card"><div class="sizing-label">Recommended end-fed length</div><div class="sizing-value">' + formatMetersAndFeet(data.halfWave) + '</div></div>' +
+          '<div class="sizing-card"><div class="sizing-label">Quarter-wave option</div><div class="sizing-value">' + formatMetersAndFeet(data.qtrWave) + '</div></div>' +
+          '<div class="sizing-card"><div class="sizing-label">Minimum counterpoise</div><div class="sizing-value">' + formatMetersAndFeet(data.counterpoise) + '</div></div>' +
           '<div class="sizing-card"><div class="sizing-label">Center frequency</div><div class="sizing-value">' + data.freq.toFixed(1) + ' MHz</div></div>';
 
         document.getElementById("portable-results").innerHTML = html;
