@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Coax Loss Calculator</title>
+  <link rel="stylesheet" href="../res/dipole_optimizer.css">
+</head>
+<body>
+  <main class="card">
+    <section class="header">
+      <h1>Coax Loss Calculator</h1>
+      <p class="subtitle">Calculate feedline loss by cable type, frequency, and length.</p>
+      <nav class="top-links" aria-label="Navigation">
+        <a class="tool-link" href="../index.html">Back to index</a>
+      </nav>
+    </section>
+
+    <form id="coax-form" novalidate>
+      <div class="grid">
+        <div>
+          <label for="cable-type">Cable type</label>
+          <select id="cable-type" name="cable-type">
+            <option value="">Loading cables...</option>
+          </select>
+        </div>
+        <div id="custom-cable-fields" style="display: none;">
+          <label for="custom-attenuation">Attenuation (dB)</label>
+          <input id="custom-attenuation" name="custom-attenuation" type="text" inputmode="decimal" maxlength="12" placeholder="0.95">
+          <div class="hint">From datasheet: dB per 100m @ 100MHz</div>
+        </div>
+        <div>
+          <label for="frequency">Frequency (MHz)</label>
+          <input id="frequency" name="frequency" type="text" inputmode="decimal" maxlength="12" placeholder="146.520" value="146.520">
+          <div class="hint">0.001 to 10000 MHz</div>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div>
+          <label for="length">Cable length (meters)</label>
+          <input id="length" name="length" type="text" inputmode="decimal" maxlength="12" placeholder="15" value="15">
+          <div class="hint" id="length-conversion">15 m = 49.2 ft</div>
+        </div>
+        <div>
+          <label for="power">TX power (watts)</label>
+          <input id="power" name="power" type="text" inputmode="decimal" maxlength="12" placeholder="50" value="50">
+          <div class="hint">Power at radio</div>
+        </div>
+      </div>
+
+      <button type="submit">Calculate Loss</button>
+    </form>
+
+    <div id="errors" class="errors" aria-live="polite"></div>
+
+    <section id="result" class="result" aria-live="polite">
+      <div class="sizing-results" id="loss-results"></div>
+      <p class="foot">Loss scales with frequency. Real-world factors (temperature, connector quality) affect actual loss.</p>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      "use strict";
+
+      var cablesData = [
+        // Attenuation values are dB per 100 meters at 100 MHz, from HSP.it datasheet table
+        { name: "RG-58", attenuation: 14.93, notes: "Thin coax - portable" },
+        { name: "RG-213", attenuation: 6.62, notes: "Standard coax - general purpose" },
+        { name: "RG-174", attenuation: 29.86, notes: "Thin - patch cables only" },
+        { name: "H-155", attenuation: 9.30, notes: "Low loss - stranded conductor" },
+        { name: "H-500", attenuation: 4.10, notes: "Very low loss - Belden H-500" },
+        { name: "H-1000", attenuation: 3.90, notes: "Very low loss - Belden H-1000" },
+        { name: "H-1500", attenuation: 2.50, notes: "Lowest loss - Belden H-1500" },
+        { name: "Aircell 7", attenuation: 6.43, notes: "Foam dielectric - low loss" },
+        { name: "Aircom Plus", attenuation: 3.21, notes: "Foam dielectric - very low loss" }
+      ];
+
+      var cableSpecs = {};
+
+      var form = document.getElementById("coax-form");
+      var cableTypeInput = document.getElementById("cable-type");
+      var customCableFields = document.getElementById("custom-cable-fields");
+      var customAttenuationInput = document.getElementById("custom-attenuation");
+      var frequencyInput = document.getElementById("frequency");
+      var lengthInput = document.getElementById("length");
+      var lengthConversion = document.getElementById("length-conversion");
+      var powerInput = document.getElementById("power");
+      var errorsBox = document.getElementById("errors");
+      var resultBox = document.getElementById("result");
+
+      function populateCableDropdown() {
+        cableTypeInput.innerHTML = "";
+
+        for (var i = 0; i < cablesData.length; i += 1) {
+          var cable = cablesData[i];
+          var key = cable.name.toLowerCase().replace(/[\s\-]/g, "_");
+          cableSpecs[key] = cable.attenuation;
+
+          var option = document.createElement("option");
+          option.value = key;
+          option.textContent = cable.name + " (" + cable.attenuation.toFixed(2) + " dB/100m @ 100MHz) - " + cable.notes;
+          cableTypeInput.appendChild(option);
+        }
+
+        var customOption = document.createElement("option");
+        customOption.value = "custom";
+        customOption.textContent = "Custom (manual dB/100m)";
+        cableTypeInput.appendChild(customOption);
+
+        cableTypeInput.value = Object.keys(cableSpecs)[0] || "";
+      }
+
+      populateCableDropdown();
+
+      function parseNumber(raw, fieldName, min, errors) {
+        var val = raw.trim();
+        if (val === "") {
+          errors.push(fieldName + " is required.");
+          return null;
+        }
+        if (!/^\d{1,5}(\.\d{1,6})?$/.test(val)) {
+          errors.push(fieldName + " must be a positive decimal.");
+          return null;
+        }
+        var num = Number(val);
+        if (!Number.isFinite(num) || num < min) {
+          errors.push(fieldName + " must be >= " + min + ".");
+          return null;
+        }
+        return num;
+      }
+
+      function toggleCustomFields() {
+        if (cableTypeInput.value === "custom") {
+          customCableFields.style.display = "block";
+        } else {
+          customCableFields.style.display = "none";
+        }
+      }
+
+      function updateLengthConversion() {
+        var val = lengthInput.value.trim();
+        if (val === "" || !/^\d{1,5}(\.\d{1,6})?$/.test(val)) {
+          lengthConversion.textContent = "Positive decimal value";
+          return;
+        }
+        var meters = Number(val);
+        var feet = (meters * 3.28084).toFixed(1);
+        lengthConversion.textContent = meters + " m = " + feet + " ft";
+      }
+
+      cableTypeInput.addEventListener("change", toggleCustomFields);
+      lengthInput.addEventListener("input", updateLengthConversion);
+
+      function showErrors(errors) {
+        if (!errors.length) {
+          errorsBox.style.display = "none";
+          return;
+        }
+        var html = "<strong>Validation error</strong><ul>";
+        for (var i = 0; i < errors.length; i += 1) {
+          html += "<li>" + errors[i].replace(/[<>&]/g, "") + "</li>";
+        }
+        html += "</ul>";
+        errorsBox.innerHTML = html;
+        errorsBox.style.display = "block";
+      }
+
+      function showResult(data) {
+        var html =
+          '<div class="sizing-card"><div class="sizing-label">Loss @ reference</div><div class="sizing-value">' + data.lossRef.toFixed(2) + ' dB</div></div>' +
+          '<div class="sizing-card"><div class="sizing-label">Actual loss @ ' + data.freq.toFixed(1) + ' MHz</div><div class="sizing-value">' + data.actualLoss.toFixed(2) + ' dB</div></div>' +
+          '<div class="sizing-card"><div class="sizing-label">Power at antenna</div><div class="sizing-value">' + data.powerOut.toFixed(1) + ' W</div></div>' +
+          '<div class="sizing-card"><div class="sizing-label">Power dissipated in cable</div><div class="sizing-value">' + data.powerLoss.toFixed(1) + ' W</div></div>';
+        document.getElementById("loss-results").innerHTML = html;
+        resultBox.style.display = "block";
+      }
+
+      form.addEventListener("submit", function (event) {
+        event.preventDefault();
+
+        var errors = [];
+        var freq = parseNumber(frequencyInput.value, "Frequency", 0.001, errors);
+        var length = parseNumber(lengthInput.value, "Length", 0.1, errors);
+        var power = parseNumber(powerInput.value, "Power", 0.1, errors);
+
+        var cableType = cableTypeInput.value;
+        var lossRef;
+
+        if (cableType === "custom") {
+          lossRef = parseNumber(customAttenuationInput.value, "Custom attenuation", 0.01, errors);
+        } else {
+          lossRef = cableSpecs[cableType];
+        }
+
+        showErrors(errors);
+        if (errors.length > 0) {
+          resultBox.style.display = "none";
+          return;
+        }
+
+        var freqRatio = freq / 100;
+        var actualLoss = lossRef * Math.sqrt(freqRatio) * (length / 100);
+
+        var linearLoss = Math.pow(10, -actualLoss / 10);
+        var powerOut = power * linearLoss;
+        var powerLoss = power - powerOut;
+
+        showResult({
+          freq: freq,
+          lossRef: lossRef,
+          actualLoss: actualLoss,
+          powerOut: powerOut,
+          powerLoss: powerLoss
+        });
+      });
+    }());
+  </script>
+</body>
+</html>

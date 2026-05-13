@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Matching Network Helper</title>
+  <link rel="stylesheet" href="../res/dipole_optimizer.css">
+</head>
+<body>
+  <main class="card">
+    <section class="header">
+      <h1>Matching Network Helper</h1>
+      <p class="subtitle">Calculate impedance transformation ratios for common network types.</p>
+      <nav class="top-links" aria-label="Navigation">
+        <a class="tool-link" href="../index.html">Back to index</a>
+      </nav>
+    </section>
+
+    <form id="match-form" novalidate>
+      <div class="grid">
+        <div>
+          <label for="source-z">Source impedance (ohms)</label>
+          <input id="source-z" name="source-z" type="text" inputmode="decimal" maxlength="12" placeholder="50" value="50">
+          <div class="hint">Usually 50 ohms for coax</div>
+        </div>
+        <div>
+          <label for="load-z">Load impedance (ohms)</label>
+          <input id="load-z" name="load-z" type="text" inputmode="decimal" maxlength="12" placeholder="200" value="200">
+          <div class="hint">Antenna or component impedance</div>
+        </div>
+      </div>
+
+      <button type="submit">Calculate Ratio</button>
+    </form>
+
+    <div id="errors" class="errors" aria-live="polite"></div>
+
+    <section id="result" class="result" aria-live="polite">
+      <div class="sizing-results" id="ratio-results"></div>
+      <table>
+        <thead>
+          <tr>
+            <th>Network Type</th>
+            <th>Turns Ratio</th>
+            <th>Application</th>
+          </tr>
+        </thead>
+        <tbody id="network-table">
+        </tbody>
+      </table>
+      <p class="foot">Common transformer ratios: 1:1 (balun), 4:1 (dipole to coax), 9:1 (end-fed wire).</p>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      "use strict";
+
+      var form = document.getElementById("match-form");
+      var sourceInput = document.getElementById("source-z");
+      var loadInput = document.getElementById("load-z");
+      var errorsBox = document.getElementById("errors");
+      var resultBox = document.getElementById("result");
+
+      function parseImpedance(raw, fieldName, errors) {
+        var val = raw.trim();
+        if (val === "") {
+          errors.push(fieldName + " is required.");
+          return null;
+        }
+        if (!/^\d{1,5}(\.\d{1,3})?$/.test(val)) {
+          errors.push(fieldName + " must be a positive number (ohms).");
+          return null;
+        }
+        var num = Number(val);
+        if (!Number.isFinite(num) || num <= 0 || num > 10000) {
+          errors.push(fieldName + " must be between 1 and 10000 ohms.");
+          return null;
+        }
+        return num;
+      }
+
+      function showErrors(errors) {
+        if (!errors.length) {
+          errorsBox.style.display = "none";
+          return;
+        }
+        var html = "<strong>Validation error</strong><ul>";
+        for (var i = 0; i < errors.length; i += 1) {
+          html += "<li>" + errors[i].replace(/[<>&]/g, "") + "</li>";
+        }
+        html += "</ul>";
+        errorsBox.innerHTML = html;
+        errorsBox.style.display = "block";
+      }
+
+      function showResult(source, load) {
+        var ratio = load / source;
+        var turnRatio = Math.sqrt(ratio);
+
+        var commonRatios = [
+          { type: "1:1", ratio: 1, use: "No transformation / balun only" },
+          { type: "4:1", ratio: 4, use: "Dipole (200Ω) to coax (50Ω)" },
+          { type: "9:1", ratio: 9, use: "End-fed wire (450Ω) to coax (50Ω)" }
+        ];
+
+        var html = '<div class="sizing-card"><div class="sizing-label">Impedance ratio (Zload/Zsource)</div><div class="sizing-value">' + ratio.toFixed(2) + ':1</div></div>' +
+                   '<div class="sizing-card"><div class="sizing-label">Turns ratio (N1:N2)</div><div class="sizing-value">1:' + turnRatio.toFixed(3) + '</div></div>';
+
+        document.getElementById("ratio-results").innerHTML = html;
+
+        var tableHtml = "";
+        for (var i = 0; i < commonRatios.length; i += 1) {
+          tableHtml += "<tr><td>" + commonRatios[i].type + "</td><td>" + commonRatios[i].ratio + ":1</td><td>" + commonRatios[i].use + "</td></tr>";
+        }
+        document.getElementById("network-table").innerHTML = tableHtml;
+
+        resultBox.style.display = "block";
+      }
+
+      form.addEventListener("submit", function (event) {
+        event.preventDefault();
+
+        var errors = [];
+        var source = parseImpedance(sourceInput.value, "Source impedance", errors);
+        var load = parseImpedance(loadInput.value, "Load impedance", errors);
+
+        showErrors(errors);
+        if (errors.length > 0) {
+          resultBox.style.display = "none";
+          return;
+        }
+
+        showResult(source, load);
+      });
+    }());
+  </script>
+</body>
+</html>

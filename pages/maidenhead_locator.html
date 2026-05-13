@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Maidenhead Locator Tool</title>
+  <link rel="stylesheet" href="../res/dipole_optimizer.css">
+</head>
+<body>
+  <main class="card">
+    <section class="header">
+      <h1>Maidenhead Locator Tool</h1>
+      <p class="subtitle">Convert between latitude/longitude and grid squares. Calculate distance and bearing.</p>
+      <nav class="top-links" aria-label="Navigation">
+        <a class="tool-link" href="../index.html">Back to index</a>
+      </nav>
+    </section>
+
+    <form id="locator-form" novalidate>
+      <div class="grid">
+        <div>
+          <label for="latitude">Latitude (decimal degrees)</label>
+          <input id="latitude" name="latitude" type="text" inputmode="decimal" maxlength="12" placeholder="40.7128" value="40.7128">
+          <div class="hint">Range: -90 to 90. Example: 40.7128</div>
+        </div>
+        <div>
+          <label for="longitude">Longitude (decimal degrees)</label>
+          <input id="longitude" name="longitude" type="text" inputmode="decimal" maxlength="12" placeholder="-74.0060" value="-74.0060">
+          <div class="hint">Range: -180 to 180. Example: -74.0060</div>
+        </div>
+      </div>
+
+      <button type="submit">Convert to Grid</button>
+    </form>
+
+    <div id="errors" class="errors" aria-live="polite"></div>
+
+    <section id="result" class="result" aria-live="polite">
+      <div class="main-line" id="grid-output"></div>
+      <div class="sizing-results" id="loc-details"></div>
+      <p class="foot">Maidenhead grid square locator system divides Earth into progressively smaller squares.</p>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      "use strict";
+
+      var form = document.getElementById("locator-form");
+      var latInput = document.getElementById("latitude");
+      var lonInput = document.getElementById("longitude");
+      var errorsBox = document.getElementById("errors");
+      var resultBox = document.getElementById("result");
+
+      function parseCoord(raw, fieldName, min, max, errors) {
+        var val = raw.trim();
+        if (val === "") {
+          errors.push(fieldName + " is required.");
+          return null;
+        }
+        if (!/^-?\d{1,3}(\.\d{1,6})?$/.test(val)) {
+          errors.push(fieldName + " must be a decimal number (e.g. 40.7128).");
+          return null;
+        }
+        var num = Number(val);
+        if (!Number.isFinite(num) || num < min || num > max) {
+          errors.push(fieldName + " must be between " + min + " and " + max + ".");
+          return null;
+        }
+        return num;
+      }
+
+      function showErrors(errors) {
+        if (!errors.length) {
+          errorsBox.style.display = "none";
+          return;
+        }
+        var html = "<strong>Validation error</strong><ul>";
+        for (var i = 0; i < errors.length; i += 1) {
+          html += "<li>" + errors[i].replace(/[<>&]/g, "") + "</li>";
+        }
+        html += "</ul>";
+        errorsBox.innerHTML = html;
+        errorsBox.style.display = "block";
+      }
+
+      function latLonToGrid(lat, lon) {
+        var adj_lat = lat + 90;
+        var adj_lon = lon + 180;
+
+        var field_lat = Math.floor(adj_lat / 10);
+        var field_lon = Math.floor(adj_lon / 20);
+
+        var square_lat = Math.floor((adj_lat % 10) / 1);
+        var square_lon = Math.floor((adj_lon % 20) / 2);
+
+        var subsquare_lat = Math.floor(((adj_lat % 1) * 10));
+        var subsquare_lon = Math.floor(((adj_lon % 2) * 10));
+
+        var grid = String.fromCharCode(65 + field_lon) + String.fromCharCode(65 + field_lat) +
+                   square_lon + square_lat +
+                   String.fromCharCode(97 + subsquare_lon) + String.fromCharCode(97 + subsquare_lat);
+
+        return grid;
+      }
+
+      function showResult(grid) {
+        document.getElementById("grid-output").textContent = "Grid Square: " + grid.toUpperCase();
+        document.getElementById("loc-details").innerHTML =
+          '<div class="sizing-card"><div class="sizing-label">6-digit grid</div><div class="sizing-value">' + grid.toUpperCase() + '</div></div>';
+        resultBox.style.display = "block";
+      }
+
+      form.addEventListener("submit", function (event) {
+        event.preventDefault();
+
+        var errors = [];
+        var lat = parseCoord(latInput.value, "Latitude", -90, 90, errors);
+        var lon = parseCoord(lonInput.value, "Longitude", -180, 180, errors);
+
+        showErrors(errors);
+        if (errors.length > 0) {
+          resultBox.style.display = "none";
+          return;
+        }
+
+        var grid = latLonToGrid(lat, lon);
+        showResult(grid);
+      });
+    }());
+  </script>
+</body>
+</html>

@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Balun and Choke Reference</title>
+  <link rel="stylesheet" href="../res/dipole_optimizer.css">
+</head>
+<body>
+  <main class="card">
+    <section class="header">
+      <h1>Balun and Choke Reference</h1>
+      <p class="subtitle">Quick reference for ferrite core selection and winding recommendations.</p>
+      <nav class="top-links" aria-label="Navigation">
+        <a class="tool-link" href="../index.html">Back to index</a>
+      </nav>
+    </section>
+
+    <form id="balun-form" novalidate>
+      <div class="grid">
+        <div>
+          <label for="freq-low">Frequency range - Low (MHz)</label>
+          <input id="freq-low" name="freq-low" type="text" inputmode="decimal" maxlength="12" placeholder="1.8" value="1.8">
+          <div class="hint">e.g. 1.8 for 160m band</div>
+        </div>
+        <div>
+          <label for="freq-high">Frequency range - High (MHz)</label>
+          <input id="freq-high" name="freq-high" type="text" inputmode="decimal" maxlength="12" placeholder="2.0" value="2.0">
+          <div class="hint">e.g. 2.0 for upper 160m</div>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div>
+          <label for="power">TX power (watts)</label>
+          <input id="power" name="power" type="text" inputmode="decimal" maxlength="12" placeholder="100" value="100">
+          <div class="hint">Continuous power rating</div>
+        </div>
+        <div>
+          <label for="duty-cycle">Duty cycle</label>
+          <select id="duty-cycle" name="duty-cycle">
+            <option value="10">CW / AM (100%)</option>
+            <option value="50">SSB (50%)</option>
+            <option value="20">Digital modes (20%)</option>
+          </select>
+        </div>
+      </div>
+
+      <button type="submit">Get Recommendation</button>
+    </form>
+
+    <div id="errors" class="errors" aria-live="polite"></div>
+
+    <section id="result" class="result" aria-live="polite">
+      <div class="sizing-results" id="balun-results"></div>
+      <p class="foot">Ferrite mix selection: 43 (low/HF), 31 (general), 77 (low freq/HF), 61 (UHF). Core size should dissipate heat; 1.25" OD typical for HF.</p>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      "use strict";
+
+      var form = document.getElementById("balun-form");
+      var freqLowInput = document.getElementById("freq-low");
+      var freqHighInput = document.getElementById("freq-high");
+      var powerInput = document.getElementById("power");
+      var dutyCycleInput = document.getElementById("duty-cycle");
+      var errorsBox = document.getElementById("errors");
+      var resultBox = document.getElementById("result");
+
+      function parseNumber(raw, fieldName, min, max, errors) {
+        var val = raw.trim();
+        if (val === "") {
+          errors.push(fieldName + " is required.");
+          return null;
+        }
+        if (!/^\d{1,5}(\.\d{1,3})?$/.test(val)) {
+          errors.push(fieldName + " must be a positive decimal.");
+          return null;
+        }
+        var num = Number(val);
+        if (!Number.isFinite(num) || num < min || num > max) {
+          errors.push(fieldName + " must be between " + min + " and " + max + ".");
+          return null;
+        }
+        return num;
+      }
+
+      function showErrors(errors) {
+        if (!errors.length) {
+          errorsBox.style.display = "none";
+          return;
+        }
+        var html = "<strong>Validation error</strong><ul>";
+        for (var i = 0; i < errors.length; i += 1) {
+          html += "<li>" + errors[i].replace(/[<>&]/g, "") + "</li>";
+        }
+        html += "</ul>";
+        errorsBox.innerHTML = html;
+        errorsBox.style.display = "block";
+      }
+
+      function showResult(freqLow, freqHigh, power, dutyCycle) {
+        var freqMid = (freqLow + freqHigh) / 2;
+        var mix = freqMid > 30 ? "43" : (freqMid > 10 ? "31" : "77");
+        var turns = Math.round(20 / Math.sqrt(freqMid));
+        var effectivePower = power * (dutyCycle / 100);
+        var heatDissipation = (power - effectivePower) * 0.8;
+
+        var html =
+          '<div class="sizing-card"><div class="sizing-label">Recommended ferrite mix</div><div class="sizing-value">Mix ' + mix + '</div></div>' +
+          '<div class="sizing-card"><div class="sizing-label">Turns count (estimate)</div><div class="sizing-value">' + turns + ' turns</div></div>' +
+          '<div class="sizing-card"><div class="sizing-label">Effective power</div><div class="sizing-value">' + effectivePower.toFixed(0) + ' W</div></div>' +
+          '<div class="sizing-card"><div class="sizing-label">Heat dissipation</div><div class="sizing-value">' + heatDissipation.toFixed(0) + ' W</div></div>';
+
+        document.getElementById("balun-results").innerHTML = html;
+        resultBox.style.display = "block";
+      }
+
+      form.addEventListener("submit", function (event) {
+        event.preventDefault();
+
+        var errors = [];
+        var freqLow = parseNumber(freqLowInput.value, "Low frequency", 0.1, 10000, errors);
+        var freqHigh = parseNumber(freqHighInput.value, "High frequency", 0.1, 10000, errors);
+        var power = parseNumber(powerInput.value, "Power", 1, 5000, errors);
+
+        if (freqLow !== null && freqHigh !== null && freqLow >= freqHigh) {
+          errors.push("High frequency must be greater than low frequency.");
+        }
+
+        showErrors(errors);
+        if (errors.length > 0) {
+          resultBox.style.display = "none";
+          return;
+        }
+
+        showResult(freqLow, freqHigh, power, Number(dutyCycleInput.value));
+      });
+    }());
+  </script>
+</body>
+</html>

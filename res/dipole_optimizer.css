@@ -151,6 +151,35 @@ input[type="text"]:focus {
   box-shadow: 0 0 0 2px #22d3ee33;
 }
 
+select {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid #2f3f55;
+  border-radius: 10px;
+  background: #0b1322;
+  color: var(--text);
+  outline: none;
+  font-size: 1rem;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2322d3ee' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 20px;
+  padding-right: 40px;
+}
+
+select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px #22d3ee33;
+}
+
+select option {
+  background: #0b1322;
+  color: var(--text);
+  padding: 8px;
+}
+
 .hint {
   color: var(--muted);
   font-size: 0.83rem;

@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Portable Ops Toolkit</title>
+  <link rel="stylesheet" href="../res/dipole_optimizer.css">
+</head>
+<body>
+  <main class="card">
+    <section class="header">
+      <h1>Portable Ops Toolkit</h1>
+      <p class="subtitle">Quick reference for end-fed wire lengths and counterpoise recommendations per band.</p>
+      <nav class="top-links" aria-label="Navigation">
+        <a class="tool-link" href="../index.html">Back to index</a>
+      </nav>
+    </section>
+
+    <form id="portable-form" novalidate>
+      <div class="grid">
+        <div>
+          <label for="band">Band selection</label>
+          <select id="band" name="band">
+            <option value="160">160m (1.8-2.0 MHz)</option>
+            <option value="80">80m (3.5-4.0 MHz)</option>
+            <option value="40">40m (7.0-7.3 MHz)</option>
+            <option value="20">20m (14.0-14.35 MHz)</option>
+            <option value="15">15m (21.0-21.45 MHz)</option>
+            <option value="10">10m (28.0-29.7 MHz)</option>
+            <option value="6">6m (50.0-54.0 MHz)</option>
+            <option value="2">2m (144-148 MHz)</option>
+          </select>
+        </div>
+      </div>
+
+      <button type="submit">Get Configuration</button>
+    </form>
+
+    <div id="errors" class="errors" aria-live="polite"></div>
+
+    <section id="result" class="result" aria-live="polite">
+      <div class="sizing-results" id="portable-results"></div>
+      <p class="foot">End-fed wires are popular for portable ops. Counterpoise length reduces ground-dependent performance. Use with 9:1 matching transformer into 50Ω feedline.</p>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      "use strict";
+
+      var bandData = {
+        "160": { freq: 1.9, halfWave: 78.7, qtrWave: 39.35, counterpoise: 10.7 },
+        "80": { freq: 3.75, halfWave: 39.4, qtrWave: 19.7, counterpoise: 5.4 },
+        "40": { freq: 7.15, halfWave: 20.6, qtrWave: 10.3, counterpoise: 2.8 },
+        "20": { freq: 14.2, halfWave: 10.3, qtrWave: 5.15, counterpoise: 1.4 },
+        "15": { freq: 21.3, halfWave: 6.85, qtrWave: 3.43, counterpoise: 0.9 },
+        "10": { freq: 28.5, halfWave: 5.12, qtrWave: 2.56, counterpoise: 0.7 },
+        "6": { freq: 52, halfWave: 2.79, qtrWave: 1.4, counterpoise: 0.38 },
+        "2": { freq: 146, halfWave: 0.99, qtrWave: 0.5, counterpoise: 0.14 }
+      };
+
+      var form = document.getElementById("portable-form");
+      var bandInput = document.getElementById("band");
+      var resultBox = document.getElementById("result");
+
+      function showResult(band) {
+        var data = bandData[band];
+        var html =
+          '<div class="sizing-card"><div class="sizing-label">Recommended end-fed length</div><div class="sizing-value">' + data.halfWave.toFixed(1) + ' ft</div></div>' +
+          '<div class="sizing-card"><div class="sizing-label">Quarter-wave option</div><div class="sizing-value">' + data.qtrWave.toFixed(1) + ' ft</div></div>' +
+          '<div class="sizing-card"><div class="sizing-label">Minimum counterpoise</div><div class="sizing-value">' + data.counterpoise.toFixed(1) + ' ft</div></div>' +
+          '<div class="sizing-card"><div class="sizing-label">Center frequency</div><div class="sizing-value">' + data.freq.toFixed(1) + ' MHz</div></div>';
+
+        document.getElementById("portable-results").innerHTML = html;
+        resultBox.style.display = "block";
+      }
+
+      form.addEventListener("submit", function (event) {
+        event.preventDefault();
+        showResult(bandInput.value);
+      });
+
+      // Auto-show default result on load
+      showResult("40");
+    }());
+  </script>
+</body>
+</html>
